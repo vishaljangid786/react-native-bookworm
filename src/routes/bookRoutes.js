@@ -8,13 +8,34 @@ const router = express.Router();
 router.post("/", protectRoute, async (req, res) => {
   try {
     const { title, caption, rating, image } = req.body;
+    console.log(title, caption, rating);
 
     if (!title || !caption || !rating || !image) {
       return res.status(400).json({ message: "Please provide all fields" });
     }
 
-    // upload image to cloudinary
-    const uploadResponse = await cloudinary.uploader.upload(image);
+    // Convert base64 data URL to buffer for Cloudinary
+    const base64Data = image.replace(/^data:image\/[a-z]+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+
+    // upload image to cloudinary using buffer
+    const uploadResponse = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          resource_type: "auto",
+          folder: "book-covers",
+          public_id: `book_${Date.now()}_${Math.random()
+            .toString(36)
+            .substr(2, 9)}`,
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );5
+
+      uploadStream.end(buffer);
+    });
 
     const imageUrl = uploadResponse.secure_url;
     // save to the database
@@ -30,7 +51,7 @@ router.post("/", protectRoute, async (req, res) => {
 
     res.status(201).json(newBook);
   } catch (error) {
-    console.log("Error Creating Book", error);
+    console.log("Error Creating ", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -40,7 +61,7 @@ router.get("/", protectRoute, async (req, res) => {
   try {
     const page = req.query.page || 1;
     const limit = req.query.limit || 5;
-    const skit = (page - 1) * limit;
+    const skip = (page - 1) * limit;
     const books = await Book.find()
       .sort({ createdAt: -1 }) //descending
       .skip(skip)
@@ -63,7 +84,7 @@ router.get("/", protectRoute, async (req, res) => {
 
 router.get("/user", protectRoute, async (req, res) => {
   try {
-    const books = await Book.fint({ user: req.user._id }).sort({
+    const books = await Book.find({ user: req.user._id }).sort({
       createdAt: -1,
     });
     res.json(books);
@@ -83,7 +104,7 @@ router.delete("/:id", async function (req, res) {
       return res.status(401).json({ message: "Unauthorized" });
 
     // delete the imagee from cloudinary as well
-    if (book.image && book.image.imaeg.includes("cloudinary")) {
+    if (book.image && book.image.includes("cloudinary")) {
       try {
         const publicId = book.image.split("/").pop().split(".")[0];
         await cloudinary.uploader.destroy(publicId);
