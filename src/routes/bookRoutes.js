@@ -95,9 +95,10 @@ router.get("/user", protectRoute, async (req, res) => {
   }
 });
 
-router.delete("/:id", async function (req, res) {
+router.delete("/:id",protectRoute, async function (req, res) {
   try {
     const book = await Book.findById(req.params.id);
+    
     if (!book) return res.status(404).json({ message: "Book not found" });
 
     // check if useris the creater of the book
